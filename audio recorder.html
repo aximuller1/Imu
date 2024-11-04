@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Recorder with Echo Effect</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+
+        audio {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Audio Recorder with Echo Effect</h1>
+    <button id="startButton">Start Recording</button>
+    <button id="stopButton" disabled>Stop Recording</button>
+    <audio id="audioPlayback" controls></audio>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const audioPlayback = document.getElementById('audioPlayback');
+
+        let mediaRecorder;
+        let audioChunks = [];
+
+        // Function to apply echo effect
+        function applyEchoEffect(audioBuffer) {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+
+            const delayNode = audioContext.createDelay();
+            delayNode.delayTime.value = 0.5; // Adjust delay time as needed
+
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = 0.5; // Adjust feedback level as needed
+
+            source.connect(delayNode);
+            delayNode.connect(gainNode);
+            gainNode.connect(delayNode); // Connect feedback to the gain node
+            gainNode.connect(audioContext.destination); // Connect to the output
+
+            source.start();
+        }
+
+        // Request permission to access the microphone and start recording
+        startButton.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+
+                startButton.disabled = true;
+                stopButton.disabled = false;
+
+                console.log("Recording started...");
+
+                mediaRecorder.addEventListener('dataavailable', event => {
+                    audioChunks.push(event.data);
+                });
+
+                mediaRecorder.addEventListener('stop', async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audioPlayback.src = audioUrl;
+
+                    // Create an AudioContext to process the audio
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const arrayBuffer = await audioBlob.arrayBuffer();
+                    
+                    audioContext.decodeAudioData(arrayBuffer)
+                        .then(audioBuffer => {
+                            applyEchoEffect(audioBuffer);
+                        })
+                        .catch(error => {
+                            console.error('Error decoding audio:', error);
+                        });
+
+                    console.log("Recording stopped. Audio available for playback.");
+                    audioChunks = [];
+                });
+            } catch (error) {
+                console.error("Error accessing microphone: ", error);
+                alert("Could not access the microphone. Please check permissions.");
+            }
+        });
+
+        // Stop recording
+        stopButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                console.log("Stopping recording...");
+            }
+            startButton.disabled = false;
+            stopButton.disabled = true;
+        });
+    </script>
+</body>
+</html>
